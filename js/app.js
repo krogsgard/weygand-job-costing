@@ -79,7 +79,7 @@ let activePreset = 'mtd';
 let activeJobTypes = new Set();
 let activeStatuses = new Set();
 let activePersons  = new Set();
-let costableOnly   = false;
+let activeFilter   = 'all';
 let activeSort     = 'hours-desc';
 
 // ── Utility ───────────────────────────────────────────────────────────
@@ -134,11 +134,11 @@ const $statusFilters = document.getElementById('status-filters');
 const $personFilters = document.getElementById('person-filters');
 const $cacheInfo    = document.getElementById('cache-info');
 const $jobSearch    = document.getElementById('job-search');
-const $costableOnly = document.getElementById('costable-only');
 const $dateFrom     = document.getElementById('date-from');
 const $dateTo       = document.getElementById('date-to');
-const $refreshBtn   = document.getElementById('refresh-btn');
-const $sortSelect   = document.getElementById('sort-select');
+const $refreshBtn    = document.getElementById('refresh-btn');
+const $sortSelect    = document.getElementById('sort-select');
+const $filterSelect  = document.getElementById('filter-select');
 
 // ── Date helpers ──────────────────────────────────────────────────────
 function getDateRange(preset) {
@@ -582,15 +582,15 @@ function renderPersonFilters() {
 
 // ── Apply filters ─────────────────────────────────────────────────────
 function applyFiltersAndRender() {
-    const filtered = mergedJobs.filter(j => {
+    let filtered = mergedJobs.filter(j => {
         // Search
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
             if (!j.jobNum.toLowerCase().includes(q) && !j.name.toLowerCase().includes(q)) return false;
         }
 
-        // Costable only
-        if (costableOnly && !j.costable) return false;
+        // Show filter: costable
+        if (activeFilter === 'costable' && !j.costable) return false;
 
         // Job type filter (empty = all)
         if (activeJobTypes.size > 0) {
@@ -612,6 +612,12 @@ function applyFiltersAndRender() {
 
         return true;
     });
+
+    // Show filter: outliers — apply after other filters so threshold is relative to visible set
+    if (activeFilter === 'outliers') {
+        const ceil = computeOutlierThreshold(filtered);
+        filtered = filtered.filter(j => j.effectiveRate != null && j.effectiveRate > ceil);
+    }
 
     updateStats(filtered);
     renderCurrentTab(filtered);
@@ -1288,9 +1294,9 @@ function initEvents() {
         applyFiltersAndRender();
     });
 
-    // Costable toggle
-    $costableOnly.addEventListener('change', () => {
-        costableOnly = $costableOnly.checked;
+    // Show filter (All / Costable / Outliers)
+    $filterSelect.addEventListener('change', () => {
+        activeFilter = $filterSelect.value;
         applyFiltersAndRender();
     });
 

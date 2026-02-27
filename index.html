@@ -118,17 +118,6 @@
         </div>
       </div>
 
-      <!-- Options -->
-      <div class="sidebar-section">
-        <h3 class="collapsible" id="sec-opts-h">Options</h3>
-        <div class="collapsible-content" id="sec-opts">
-          <label class="sidebar-toggle">
-            <input type="checkbox" id="costable-only">
-            Costable jobs only
-          </label>
-        </div>
-      </div>
-
       <!-- Actions -->
       <div class="sidebar-section sidebar-actions">
         <button id="refresh-btn" class="action-btn">
@@ -180,6 +169,12 @@
       <!-- Tab: Jobs -->
       <div id="tab-jobs" class="tab-panel active">
         <div id="jobs-toolbar">
+          <label class="sort-label">Show</label>
+          <select id="filter-select" class="sort-select">
+            <option value="all">All Jobs</option>
+            <option value="costable">Costable Only</option>
+            <option value="outliers">Outliers (High $/hr)</option>
+          </select>
           <label class="sort-label">Sort by</label>
           <select id="sort-select" class="sort-select">
             <option value="hours-desc">Most Hours</option>
