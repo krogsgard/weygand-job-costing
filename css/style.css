@@ -388,6 +388,48 @@ h3.collapsible.collapsed::before { transform: rotate(-90deg); }
   font-size: 13px;
 }
 
+/* ── Jobs Toolbar ── */
+#jobs-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.sort-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.sort-select {
+  background: var(--dark);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-family: var(--font);
+  cursor: pointer;
+  outline: none;
+}
+.sort-select:focus { border-color: var(--gold); }
+
+/* ── Outlier Badge ── */
+.outlier-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: rgba(248,113,113,0.15);
+  color: #f87171;
+  border: 1px solid rgba(248,113,113,0.3);
+}
+
 /* ── Job Cards ── */
 .job-card-wrapper { margin-bottom: 8px; }
 

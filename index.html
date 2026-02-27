@@ -179,6 +179,16 @@
 
       <!-- Tab: Jobs -->
       <div id="tab-jobs" class="tab-panel active">
+        <div id="jobs-toolbar">
+          <label class="sort-label">Sort by</label>
+          <select id="sort-select" class="sort-select">
+            <option value="hours-desc">Most Hours</option>
+            <option value="rate-asc">Lowest $/hr</option>
+            <option value="rate-desc">Highest $/hr</option>
+            <option value="price-desc">Highest Price</option>
+            <option value="job-num">Job Number</option>
+          </select>
+        </div>
         <div id="jobs-list"></div>
       </div>
 

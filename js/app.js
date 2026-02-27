@@ -80,6 +80,7 @@ let activeJobTypes = new Set();
 let activeStatuses = new Set();
 let activePersons  = new Set();
 let costableOnly   = false;
+let activeSort     = 'hours-desc';
 
 // ── Utility ───────────────────────────────────────────────────────────
 function fmt$(n) {
@@ -137,6 +138,7 @@ const $costableOnly = document.getElementById('costable-only');
 const $dateFrom     = document.getElementById('date-from');
 const $dateTo       = document.getElementById('date-to');
 const $refreshBtn   = document.getElementById('refresh-btn');
+const $sortSelect   = document.getElementById('sort-select');
 
 // ── Date helpers ──────────────────────────────────────────────────────
 function getDateRange(preset) {
@@ -636,6 +638,48 @@ function renderCurrentTab(filtered) {
     else if (activeTab === 'summary') renderSummary(filtered);
 }
 
+// ── Sort helpers ─────────────────────────────────────────────────────
+function sortJobs(jobs, sortKey) {
+    const sorted = [...jobs];
+    switch (sortKey) {
+        case 'rate-asc':
+            sorted.sort((a, b) => {
+                const ra = a.effectiveRate ?? Infinity;
+                const rb = b.effectiveRate ?? Infinity;
+                return ra - rb;
+            });
+            break;
+        case 'rate-desc':
+            sorted.sort((a, b) => {
+                const ra = a.effectiveRate ?? -Infinity;
+                const rb = b.effectiveRate ?? -Infinity;
+                return rb - ra;
+            });
+            break;
+        case 'price-desc':
+            sorted.sort((a, b) => b.price - a.price);
+            break;
+        case 'job-num':
+            sorted.sort((a, b) => a.jobNum.localeCompare(b.jobNum));
+            break;
+        default: // hours-desc
+            sorted.sort((a, b) => b.totalHours - a.totalHours);
+    }
+    return sorted;
+}
+
+function computeOutlierThreshold(jobs) {
+    const rates = jobs
+        .filter(j => j.effectiveRate != null && j.effectiveRate > 0)
+        .map(j => j.effectiveRate);
+    if (rates.length < 3) return Infinity;
+    rates.sort((a, b) => a - b);
+    const q1 = rates[Math.floor(rates.length * 0.25)];
+    const q3 = rates[Math.floor(rates.length * 0.75)];
+    const iqr = q3 - q1;
+    return q3 + 1.5 * iqr;
+}
+
 // ── Render: Jobs Tab ──────────────────────────────────────────────────
 function renderJobs(jobs) {
     $jobsList.innerHTML = '';
@@ -644,7 +688,10 @@ function renderJobs(jobs) {
         return;
     }
 
-    for (const job of jobs) {
+    const sorted = sortJobs(jobs, activeSort);
+    const outlierCeil = computeOutlierThreshold(jobs);
+
+    for (const job of sorted) {
         const wrapper = el('div', 'job-card-wrapper');
 
         // Card
@@ -661,6 +708,10 @@ function renderJobs(jobs) {
             badge.style.color = statusColor(job.status);
             badge.style.border = `1px solid ${statusColor(job.status)}44`;
             header.appendChild(badge);
+        }
+        if (job.effectiveRate != null && job.effectiveRate > outlierCeil) {
+            const outlier = el('span', 'outlier-badge', 'High $/hr');
+            header.appendChild(outlier);
         }
         card.appendChild(header);
 
@@ -1228,6 +1279,12 @@ function initEvents() {
     // Search
     $jobSearch.addEventListener('input', () => {
         searchQuery = $jobSearch.value.trim();
+        applyFiltersAndRender();
+    });
+
+    // Sort control
+    $sortSelect.addEventListener('change', () => {
+        activeSort = $sortSelect.value;
         applyFiltersAndRender();
     });
 
