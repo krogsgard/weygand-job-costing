@@ -799,7 +799,7 @@ h3.collapsible.collapsed::before { transform: rotate(-90deg); }
   #main-content { height: calc(100vh - var(--header-h)); }
 
   #stats-bar { flex-wrap: wrap; }
-  .stat-card { min-width: 50%; }
+  .stat-card { flex: 0 0 50%; min-width: 0; }
 
   .job-card-metrics { flex-wrap: wrap; gap: 12px; }
 
