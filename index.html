@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>Weygand Job Costing</title>
+
+  <!-- Fonts: Lato + Noto Sans Display -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;500;700;900&family=Noto+Sans+Display:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/style.css">
+
+  <script>
+    /* Embed mode detection — runs before render to avoid FOUC */
+    (function(){
+      try { var inFrame = window.self !== window.top; } catch(e) { var inFrame = true; }
+      if (inFrame || new URLSearchParams(location.search).get('embed') === 'true') {
+        document.documentElement.classList.add('embed-mode');
+      }
+    })();
+  </script>
+  <style>
+    html.embed-mode .sidebar-header { display: none; }
+    html.embed-mode #mobile-bar { display: none; }
+    .embed-title { display: none; }
+    @media (max-width: 768px) {
+      html.embed-mode #mobile-bar { display: flex; justify-content: space-between; }
+      html.embed-mode #mobile-bar .mobile-logo { display: none; }
+      html.embed-mode .embed-title {
+        display: block;
+        color: #EBCA9C;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Mobile top bar -->
+  <div id="mobile-bar">
+    <img src="img/weygand-logo.svg" alt="Weygand" class="mobile-logo">
+    <span class="embed-title">Job Costing</span>
+    <div class="mobile-actions">
+      <button id="mobile-menu-btn" class="mobile-btn" aria-label="Menu">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Sidebar overlay for mobile -->
+  <div id="sidebar-overlay"></div>
+
+  <div id="app-layout">
+
+    <!-- ── Sidebar ── -->
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <img src="img/weygand-logo.svg" alt="Weygand" class="sidebar-logo">
+        <span class="subtitle">Job Costing</span>
+        <button id="sidebar-close" class="mobile-btn sidebar-close-btn" aria-label="Close menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Search -->
+      <div class="sidebar-section">
+        <input id="job-search" type="text" class="sidebar-input" placeholder="Search job number or name…">
+      </div>
+
+      <!-- Date Range -->
+      <div class="sidebar-section">
+        <h3 class="collapsible" id="sec-date-h">Date Range</h3>
+        <div class="collapsible-content" id="sec-date">
+          <div class="date-row">
+            <label class="date-label">From</label>
+            <input type="date" id="date-from" class="sidebar-date">
+          </div>
+          <div class="date-row">
+            <label class="date-label">To</label>
+            <input type="date" id="date-to" class="sidebar-date">
+          </div>
+          <div class="preset-btns">
+            <button class="preset-btn active" data-days="30">30d</button>
+            <button class="preset-btn" data-days="90">90d</button>
+            <button class="preset-btn" data-days="180">180d</button>
+            <button class="preset-btn" data-days="365">1yr</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Job Type Filters -->
+      <div class="sidebar-section">
+        <h3 class="collapsible" id="sec-type-h">Job Type</h3>
+        <div class="collapsible-content" id="sec-type">
+          <div id="type-filters"></div>
+        </div>
+      </div>
+
+      <!-- Status Filters -->
+      <div class="sidebar-section">
+        <h3 class="collapsible collapsed" id="sec-status-h">Status</h3>
+        <div class="collapsible-content collapsed" id="sec-status">
+          <div id="status-filters"></div>
+        </div>
+      </div>
+
+      <!-- Person Filter -->
+      <div class="sidebar-section">
+        <h3 class="collapsible collapsed" id="sec-person-h">Person</h3>
+        <div class="collapsible-content collapsed" id="sec-person">
+          <div id="person-filters"></div>
+        </div>
+      </div>
+
+      <!-- Options -->
+      <div class="sidebar-section">
+        <h3 class="collapsible" id="sec-opts-h">Options</h3>
+        <div class="collapsible-content" id="sec-opts">
+          <label class="sidebar-toggle">
+            <input type="checkbox" id="costable-only">
+            Costable jobs only
+          </label>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="sidebar-section sidebar-actions">
+        <button id="refresh-btn" class="action-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Refresh Data
+        </button>
+        <div id="cache-info" class="cache-info"></div>
+      </div>
+
+    </aside>
+
+    <!-- ── Main Content ── -->
+    <main id="main-content">
+
+      <!-- Summary Stats Bar -->
+      <div id="stats-bar">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-revenue">—</div>
+          <div class="stat-label">Total Revenue</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-hours">—</div>
+          <div class="stat-label">Total Hours</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-rate">—</div>
+          <div class="stat-label">Avg Rate ($/hr)</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-jobs">—</div>
+          <div class="stat-label">Jobs</div>
+        </div>
+      </div>
+
+      <!-- Tab Nav -->
+      <div id="tab-nav">
+        <button class="tab active" data-tab="jobs">Jobs</button>
+        <button class="tab" data-tab="people">People</button>
+        <button class="tab" data-tab="summary">Summary</button>
+      </div>
+
+      <!-- Loading / Error -->
+      <div id="loading-state" class="loading-state">
+        <div class="spinner"></div>
+        <span>Loading data…</span>
+      </div>
+      <div id="error-state" class="error-state" hidden></div>
+
+      <!-- Tab: Jobs -->
+      <div id="tab-jobs" class="tab-panel active">
+        <div id="jobs-list"></div>
+      </div>
+
+      <!-- Tab: People -->
+      <div id="tab-people" class="tab-panel">
+        <div id="people-list"></div>
+      </div>
+
+      <!-- Tab: Summary -->
+      <div id="tab-summary" class="tab-panel">
+        <div id="summary-charts"></div>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
