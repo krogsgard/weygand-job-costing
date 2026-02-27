@@ -810,5 +810,4 @@ h3.collapsible.collapsed::before { transform: rotate(-90deg); }
 }
 
 /* ── Embed mode ── */
-html.embed-mode #sidebar { display: none; }
 html.embed-mode #main-content { height: 100vh; }
