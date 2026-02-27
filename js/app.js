@@ -75,7 +75,7 @@ let allStatuses = [];
 let searchQuery = '';
 let activeDateFrom = null;
 let activeDateTo   = null;
-let activePresetDays = 30;
+let activePreset = 'mtd';
 let activeJobTypes = new Set();
 let activeStatuses = new Set();
 let activePersons  = new Set();
@@ -139,11 +139,42 @@ const $dateTo       = document.getElementById('date-to');
 const $refreshBtn   = document.getElementById('refresh-btn');
 
 // ── Date helpers ──────────────────────────────────────────────────────
-function getDateRange(days) {
+function getDateRange(preset) {
+    const now = new Date();
     const end = new Date();
     end.setHours(23, 59, 59, 999);
-    const start = new Date();
-    start.setDate(start.getDate() - days);
+    let start;
+
+    switch (preset) {
+        case 'mtd':
+            start = new Date(now.getFullYear(), now.getMonth(), 1);
+            break;
+        case 'last-month': {
+            const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            start = lm;
+            end.setTime(new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999).getTime());
+            break;
+        }
+        case 'qtd': {
+            const qMonth = Math.floor(now.getMonth() / 3) * 3;
+            start = new Date(now.getFullYear(), qMonth, 1);
+            break;
+        }
+        case 'last-quarter': {
+            const curQ = Math.floor(now.getMonth() / 3);
+            const prevQ = curQ === 0 ? 3 : curQ - 1;
+            const yr = curQ === 0 ? now.getFullYear() - 1 : now.getFullYear();
+            start = new Date(yr, prevQ * 3, 1);
+            end.setTime(new Date(yr, prevQ * 3 + 3, 0, 23, 59, 59, 999).getTime());
+            break;
+        }
+        case 'ytd':
+            start = new Date(now.getFullYear(), 0, 1);
+            break;
+        default:
+            start = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+
     start.setHours(0, 0, 0, 0);
     return { start, end };
 }
@@ -153,7 +184,7 @@ function toDateStr(d) {
 }
 
 function initDateRange() {
-    const { start, end } = getDateRange(activePresetDays);
+    const { start, end } = getDateRange(activePreset);
     activeDateFrom = start;
     activeDateTo   = end;
     $dateFrom.value = toDateStr(start);
@@ -1211,14 +1242,14 @@ function initEvents() {
         activeDateFrom = new Date($dateFrom.value + 'T00:00:00');
         // deactivate preset buttons
         document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-        activePresetDays = null;
+        activePreset = null;
         loadData();
     });
 
     $dateTo.addEventListener('change', () => {
         activeDateTo = new Date($dateTo.value + 'T23:59:59');
         document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-        activePresetDays = null;
+        activePreset = null;
         loadData();
     });
 
@@ -1227,8 +1258,8 @@ function initEvents() {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-            activePresetDays = parseInt(btn.dataset.days);
-            const { start, end } = getDateRange(activePresetDays);
+            activePreset = btn.dataset.preset;
+            const { start, end } = getDateRange(activePreset);
             activeDateFrom = start;
             activeDateTo   = end;
             $dateFrom.value = toDateStr(start);
