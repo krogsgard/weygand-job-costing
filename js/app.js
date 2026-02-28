@@ -1,15 +1,9 @@
-// ── Clockify Config ───────────────────────────────────────────────────
-const API_KEY        = 'ZDViMDEyMzUtM2E0Ny00ZGM2LTk5ODgtZDcyNzQxZDNkMmI1';
-const WORKSPACE_ID   = '67dd8e8065b10647aeb512c8';
-const BASE_URL       = 'https://api.clockify.me/api/v1';
-const CLOCK_HEADERS  = { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' };
-
-const MONDAY_BOARD_ID  = 5765387029;
+// ── Data Layer Config ─────────────────────────────────────────────────
+const API_BASE = 'https://weygand-team.pages.dev';
 const MONDAY_BOARD_URL = 'https://weygand.monday.com/boards/5765387029';
-const MONDAY_API_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjMwNjM4NzQwNSwiYWFpIjoxMSwidWlkIjozMzYyNzExOCwiaWFkIjoiMjAyNC0wMS0wM1QxMDo0NDo0MC4wMDBaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6MTMyMTIzMDgsInJnbiI6InVzZTEifQ.fL4iIl1GOZimDazDn4NtZxHyx01rTS1SlV6WbE3CvjU';
 
-const CACHE_KEY_JOBS  = 'wjc_job_data_v3';
-const CACHE_KEY_CLOCK = 'wjc_clock_data_v3';
+const CACHE_KEY_JOBS  = 'wjc_job_data_v4';
+const CACHE_KEY_CLOCK = 'wjc_clock_data_v4';
 
 // ── Costable Statuses ─────────────────────────────────────────────────
 const COSTABLE_STATUSES = new Set([
@@ -194,155 +188,93 @@ function initDateRange() {
 }
 
 // ── API helpers ───────────────────────────────────────────────────────
-async function clockFetch(path) {
-    const res = await fetch(BASE_URL + path, { headers: CLOCK_HEADERS });
-    if (!res.ok) throw new Error(`Clockify ${res.status}: ${path}`);
-    return res.json();
-}
-
-async function mondayFetch(query) {
-    const res = await fetch('https://api.monday.com/v2', {
-        method: 'POST',
-        headers: { 'Authorization': MONDAY_API_TOKEN, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
-    });
-    if (!res.ok) throw new Error(`Monday API ${res.status}`);
-    return res.json();
-}
-
-// ── Clockify fetchers ─────────────────────────────────────────────────
-async function fetchUsers() {
-    return clockFetch(`/workspaces/${WORKSPACE_ID}/users?status=ACTIVE&page-size=100`);
-}
-
-async function fetchProjects() {
-    const map = {};
-    let page = 1;
-    while (true) {
-        const batch = await clockFetch(
-            `/workspaces/${WORKSPACE_ID}/projects?page-size=500&page=${page}&archived=false`
-        );
-        for (const p of batch) map[p.id] = { name: p.name };
-        if (batch.length < 500) break;
-        page++;
-    }
-    // Also grab archived projects to cover historical jobs
-    page = 1;
-    while (true) {
-        const batch = await clockFetch(
-            `/workspaces/${WORKSPACE_ID}/projects?page-size=500&page=${page}&archived=true`
-        );
-        for (const p of batch) if (!map[p.id]) map[p.id] = { name: p.name };
-        if (batch.length < 500) break;
-        page++;
-    }
-    return map;
-}
-
-async function fetchAllEntries(users, start, end) {
-    const isoStart = start.toISOString();
-    const isoEnd   = end.toISOString();
-    const fetches = users.map(u =>
-        clockFetch(
-            `/workspaces/${WORKSPACE_ID}/user/${u.id}/time-entries` +
-            `?start=${isoStart}&end=${isoEnd}&page-size=5000`
-        ).then(entries => entries.map(e => ({
-            ...e,
-            _userId: u.id,
-            _userName: u.name,
-        })))
-    );
-    const results = await Promise.all(fetches);
-    return results.flat();
-}
-
-// ── Monday fetcher ────────────────────────────────────────────────────
-async function fetchMondayData() {
-    const data = {};
-    let cursor = null;
-
-    const q1 = `{ boards(ids: [${MONDAY_BOARD_ID}]) { items_page(limit: 500) { cursor items {
-      name
-      column_values(ids: ["text_mkxdee8h","status","dropdown"]) { id text }
-      subitems { name column_values(ids: ["numbers"]) { text } }
-    } } } }`;
-
-    const r1 = await mondayFetch(q1);
-    const page1 = r1.data.boards[0].items_page;
-    processMondayItems(page1.items, data);
-    cursor = page1.cursor;
-
-    while (cursor) {
-        const q = `{ next_items_page(limit: 500, cursor: "${cursor}") { cursor items {
-          name
-          column_values(ids: ["text_mkxdee8h","status","dropdown"]) { id text }
-          subitems { name column_values(ids: ["numbers"]) { text } }
-        } } }`;
-        const r = await mondayFetch(q);
-        const page = r.data.next_items_page;
-        processMondayItems(page.items, data);
-        cursor = page.cursor;
-    }
-
-    return data;
-}
-
-function processMondayItems(items, out) {
-    for (const item of items) {
-        const jobNumCol  = item.column_values.find(c => c.id === 'text_mkxdee8h');
-        const statusCol  = item.column_values.find(c => c.id === 'status');
-        const typeCol    = item.column_values.find(c => c.id === 'dropdown');
-        const jn = jobNumCol?.text?.trim();
-        if (!jn) continue;
-
-        const status   = statusCol?.text || '';
-        const jobTypes = typeCol?.text
-            ? typeCol.text.split(',').map(s => s.trim()).filter(Boolean)
-            : [];
-
-        let totalPrice = 0;
-        const subitems = [];
-        for (const sub of (item.subitems || [])) {
-            const priceCol = sub.column_values.find(c => c.text && parseFloat(c.text));
-            const price    = priceCol ? parseFloat(priceCol.text) || 0 : 0;
-            totalPrice += price;
-            if (sub.name?.trim()) {
-                subitems.push({ name: sub.name.trim(), price });
-            }
+async function apiFetch(path) {
+    const res = await fetch(API_BASE + path);
+    if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+            throw new Error('Data layer offline — authentication required');
         }
+        throw new Error(`API ${res.status}: ${path}`);
+    }
+    return res.json();
+}
 
-        out[jn] = {
-            mondayName: item.name || '',
-            price: totalPrice,
-            status,
-            jobTypes,
-            subitems,
-            costable: isCostable(status),
+async function fetchAllJobs() {
+    const jobs = [];
+    let offset = 0;
+    const limit = 500;
+    while (true) {
+        const data = await apiFetch(`/api/jobs?limit=${limit}&offset=${offset}`);
+        jobs.push(...(data.data || []));
+        if (jobs.length >= (data.meta?.total || 0)) break;
+        offset += limit;
+    }
+    return jobs;
+}
+
+async function fetchAllTimeEntries(dateFrom, dateTo) {
+    const entries = [];
+    let offset = 0;
+    const limit = 1000;
+    const from = toDateStr(dateFrom);
+    const to = toDateStr(dateTo);
+    while (true) {
+        const data = await apiFetch(`/api/time?date_from=${from}&date_to=${to}&limit=${limit}&offset=${offset}`);
+        entries.push(...(data.data || []));
+        if (entries.length >= (data.meta?.total || 0)) break;
+        offset += limit;
+    }
+    return entries;
+}
+
+async function fetchApiStatus() {
+    try {
+        const data = await apiFetch('/api/status');
+        return data.data || null;
+    } catch(e) { return null; }
+}
+
+async function triggerSync() {
+    const res = await fetch(API_BASE + '/api/sync', { method: 'POST' });
+    if (!res.ok) throw new Error('Sync trigger failed: ' + res.status);
+    return res.json();
+}
+
+// ── Merge API jobs + time entries ─────────────────────────────────────
+function mergeData(jobsData, timeEntries) {
+    // Build jobs lookup map
+    const jobsMap = {};
+    for (const job of jobsData) {
+        if (!job.job_num) continue;
+        jobsMap[job.job_num] = {
+            mondayName: job.name || '',
+            price: job.price || 0,
+            status: job.status || '',
+            jobTypes: job.job_types || [],
+            subitems: [],
+            costable: isCostable(job.status || ''),
+            mondayUrl: job.monday_url || null,
         };
     }
-}
 
-// ── Merge Clockify + Monday ───────────────────────────────────────────
-function mergeData(projects, entries, mondayData) {
-    // Group entries by project
+    // Group time entries by job_num
     const byProject = {};
-    for (const e of entries) {
-        const pId = e.projectId;
-        if (!pId) continue;
-        const pData = projects[pId];
-        if (!pData) continue;
-        const pName = pData.name;
-        const jn = jobNum(pName);
-        if (!jn) continue; // skip non-job projects (office, etc.)
+    for (const e of timeEntries) {
+        let jn = e.job_num;
+        if (!jn && e.project_name) {
+            const m = e.project_name.match(/^(\d{4}-\d+)/);
+            jn = m ? m[1] : null;
+        }
+        if (!jn) continue;
 
-        const person = e._userName;
-        const hrs    = durationHours(e.timeInterval);
-        const dateStr = e.timeInterval?.start?.slice(0, 7) || ''; // YYYY-MM
+        const person  = e.person_name || 'Unknown';
+        const hrs     = e.hours || 0;
+        const dateStr = (e.date || '').slice(0, 7); // YYYY-MM
 
         if (!byProject[jn]) {
             byProject[jn] = {
                 jobNum: jn,
-                projectName: pName,
+                projectName: e.project_name || jn,
                 people: {},
                 totalHours: 0,
                 byMonth: {},
@@ -352,9 +284,7 @@ function mergeData(projects, entries, mondayData) {
             byProject[jn].people[person] = { hours: 0, days: new Set() };
         }
         byProject[jn].people[person].hours += hrs;
-        if (e.timeInterval?.start) {
-            byProject[jn].people[person].days.add(e.timeInterval.start.slice(0, 10));
-        }
+        if (e.date) byProject[jn].people[person].days.add(e.date);
         byProject[jn].totalHours += hrs;
         if (dateStr) {
             if (!byProject[jn].byMonth[dateStr]) byProject[jn].byMonth[dateStr] = 0;
@@ -362,25 +292,24 @@ function mergeData(projects, entries, mondayData) {
         }
     }
 
-    // Merge with Monday data
+    // Merge with job data
     const result = [];
     for (const [jn, clockData] of Object.entries(byProject)) {
-        const mon = mondayData[jn] || null;
+        const mon      = jobsMap[jn] || null;
         const price    = mon?.price || 0;
         const status   = mon?.status || '';
         const jobTypes = mon?.jobTypes || [];
         const subitems = mon?.subitems || [];
         const costable = mon?.costable || false;
         const mondayName = mon?.mondayName || '';
+        const mondayUrl  = mon?.mondayUrl || null;
 
-        // Determine display name: prefer Monday item name, fall back to Clockify project name
         const name = mondayName && mondayName.trim() ? mondayName.trim() : clockData.projectName;
 
         const effectiveRate = price > 0 && clockData.totalHours > 0
             ? price / clockData.totalHours
             : null;
 
-        // People breakdown
         const people = Object.entries(clockData.people).map(([pName, pd]) => ({
             name: pName,
             hours: pd.hours,
@@ -396,6 +325,7 @@ function mergeData(projects, entries, mondayData) {
             subitems,
             costable,
             price,
+            mondayUrl,
             totalHours: clockData.totalHours,
             effectiveRate,
             people,
@@ -429,14 +359,20 @@ function getCacheAge(key) {
     return Math.round((Date.now() - c.ts) / 60000); // minutes
 }
 
-function updateCacheInfo() {
-    const mAge = getCacheAge(CACHE_KEY_JOBS);
-    const cAge = getCacheAge(CACHE_KEY_CLOCK);
-    if (mAge !== null && cAge !== null) {
-        const age = Math.max(mAge, cAge);
-        $cacheInfo.textContent = `Cached ${age < 60 ? age + 'm' : Math.round(age/60) + 'h'} ago`;
+function updateCacheInfo(apiStatus) {
+    if (apiStatus?.last_syncs?.[0]?.completed_at) {
+        const lastSync = new Date(apiStatus.last_syncs[0].completed_at);
+        const ageMin = Math.round((Date.now() - lastSync) / 60000);
+        $cacheInfo.textContent = `Last synced: ${ageMin < 60 ? ageMin + 'm' : Math.round(ageMin/60) + 'h'} ago`;
     } else {
-        $cacheInfo.textContent = '';
+        const mAge = getCacheAge(CACHE_KEY_JOBS);
+        const cAge = getCacheAge(CACHE_KEY_CLOCK);
+        if (mAge !== null && cAge !== null) {
+            const age = Math.max(mAge, cAge);
+            $cacheInfo.textContent = `Cached ${age < 60 ? age + 'm' : Math.round(age/60) + 'h'} ago`;
+        } else {
+            $cacheInfo.textContent = '';
+        }
     }
 }
 
@@ -446,47 +382,65 @@ async function loadData(forceRefresh = false) {
     clearError();
 
     try {
-        // Monday data (cached independently — board data doesn't change often)
+        // Get API status (for last sync time + staleness check)
+        const apiStatus = await fetchApiStatus();
+
+        // Jobs data
         if (forceRefresh || !jobDataCache) {
             const cached = loadCache(CACHE_KEY_JOBS);
-            if (!forceRefresh && cached) {
+            const apiLastSync = apiStatus?.last_syncs?.[0]?.completed_at;
+            const cacheStale = !cached || (apiLastSync && new Date(apiLastSync) > new Date(cached.ts));
+
+            if (!forceRefresh && cached && !cacheStale) {
                 jobDataCache = cached.data;
             } else {
-                jobDataCache = await fetchMondayData();
+                jobDataCache = await fetchAllJobs();
                 saveCache(CACHE_KEY_JOBS, jobDataCache);
             }
         }
 
-        // Clockify data (cached with date range key)
+        // Time entries (cached with date range key)
         const rangeKey = `${toDateStr(activeDateFrom)}_${toDateStr(activeDateTo)}`;
         const clockCached = loadCache(CACHE_KEY_CLOCK);
-        const needClockFetch = forceRefresh ||
+        const needTimeFetch = forceRefresh ||
             !clockDataCache ||
             !clockCached ||
             clockCached.data?.rangeKey !== rangeKey;
 
-        if (needClockFetch) {
-            const [users, projects] = await Promise.all([fetchUsers(), fetchProjects()]);
-            const entries = await fetchAllEntries(users, activeDateFrom, activeDateTo);
-            clockDataCache = { users, projects, entries, rangeKey };
+        if (needTimeFetch) {
+            const entries = await fetchAllTimeEntries(activeDateFrom, activeDateTo);
+            clockDataCache = { entries, rangeKey };
             saveCache(CACHE_KEY_CLOCK, clockDataCache);
         } else if (!clockDataCache) {
             clockDataCache = clockCached.data;
         }
 
         // Merge
-        mergedJobs = mergeData(clockDataCache.projects, clockDataCache.entries, jobDataCache);
+        mergedJobs = mergeData(jobDataCache, clockDataCache.entries || []);
 
         // Build filter options
         buildFilterOptions();
 
         // Render
         applyFiltersAndRender();
-        updateCacheInfo();
+        updateCacheInfo(apiStatus);
 
     } catch(err) {
         console.error(err);
-        showError('Failed to load data: ' + err.message);
+        // Offline fallback — use cached data if available
+        const cachedJobs  = loadCache(CACHE_KEY_JOBS);
+        const cachedClock = loadCache(CACHE_KEY_CLOCK);
+        if (cachedJobs && cachedClock) {
+            jobDataCache   = cachedJobs.data;
+            clockDataCache = cachedClock.data;
+            mergedJobs     = mergeData(jobDataCache, clockDataCache.entries || []);
+            buildFilterOptions();
+            applyFiltersAndRender();
+            updateCacheInfo(null);
+            showError('Data layer offline — showing cached data. Click Refresh to retry.');
+        } else {
+            showError('Failed to load data: ' + err.message + ' — No cached data available.');
+        }
     }
 
     showLoading(false);
@@ -813,7 +767,7 @@ function renderJobs(jobs) {
         // Monday link
         const linkSec = el('div', 'detail-section');
         const link = document.createElement('a');
-        link.href = MONDAY_BOARD_URL + '?term=' + encodeURIComponent(job.jobNum);
+        link.href = job.mondayUrl || (MONDAY_BOARD_URL + '?term=' + encodeURIComponent(job.jobNum));
         link.target = '_blank';
         link.rel = 'noopener';
         link.style.cssText = 'color:#7FA8C9;font-size:12px;text-decoration:none;';
@@ -1331,11 +1285,11 @@ function initEvents() {
         });
     });
 
-    // Refresh
-    $refreshBtn.addEventListener('click', () => {
+    // Refresh — trigger server-side sync then re-fetch
+    $refreshBtn.addEventListener('click', async () => {
         $refreshBtn.classList.add('loading');
-        $refreshBtn.textContent = 'Refreshing…';
-        // Clear caches
+        $refreshBtn.textContent = 'Syncing…';
+        try { await triggerSync(); } catch(e) { console.warn('Sync trigger failed:', e); }
         localStorage.removeItem(CACHE_KEY_JOBS);
         localStorage.removeItem(CACHE_KEY_CLOCK);
         jobDataCache   = null;
