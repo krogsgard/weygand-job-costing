@@ -1,5 +1,5 @@
 // ── Data Layer Config ─────────────────────────────────────────────────
-const API_BASE = 'https://weygand-team.pages.dev';
+const API_BASE = 'https://team.weygand.com';
 const MONDAY_BOARD_URL = 'https://weygand.monday.com/boards/5765387029';
 
 const CACHE_KEY_JOBS  = 'wjc_job_data_v4';
